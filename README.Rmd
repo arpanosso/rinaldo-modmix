@@ -6,30 +6,102 @@ output: github_document
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
+  collapse = TRUE,warning = FALSE, error = FALSE, message = FALSE,
   comment = "#>"
 )
 ```
 
-# rinaldo-modmix
 
-<!-- badges: start -->
-<!-- badges: end -->
 
-The goal of rinaldo-modmix is to ...
+## Análise de modelos mistos
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+### Carregando pacotes
 
-```{r cars}
-summary(cars)
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(nlme)
+library(lme4)
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date.
+### Preparando os dados
 
-You can also embed plots, for example:
-
-```{r pressure, echo = FALSE}
-plot(pressure)
+```{r}
+ds <- readxl::read_excel("data-raw/Prod_Alan.xlsx") |> 
+  janitor::clean_names() 
+write_rds(ds, "data/prod-laranja.rds")
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub.
+### Lendo banco rds
+
+```{r}
+data_set <- read_rds("data/prod-laranja.rds")
+glimpse(data_set)
+```
+
+```{r}
+data_set$trat <- as.factor(data_set$trat)
+data_set$safra <- as.factor(data_set$safra)
+data_set$rep <- as.factor(data_set$rep)
+```
+
+```{r}
+modelo_cs <- lme(
+  fixed = prod ~ safra,               # Efeito fixo do tempo (Safra)
+  random = ~1 | trat/rep,             # Repetições aninhadas em Trat
+  correlation = corCompSymm(form = ~1 | trat),  # estrutura CS para medidas repetidas por Trat
+  data = data_set,
+  na.action = na.exclude
+)
+modelo_cs
+```
+
+```{r}
+modelo_ar1 <- update(modelo_cs, correlation = corAR1(form = ~ as.numeric(safra) | trat))
+modelo_ar1
+```
+
+```{r}
+modelo_un  <- update(modelo_cs, correlation = corSymm(form = ~ as.numeric(safra) | trat))
+modelo_un
+```
+
+```{r}
+# Comparação usando AIC e BIC
+AIC(modelo_cs, modelo_ar1, modelo_un)
+BIC(modelo_cs, modelo_ar1, modelo_un)
+```
+```{r}
+summary(modelo_cs)
+plot(modelo_cs, which = 1)  # Resíduos
+```
+
+
+
+```{r}
+summary(modelo_ar1)
+plot(modelo_ar1, which = 1)  # Resíduos
+```
+
+```{r}
+summary(modelo_un)
+plot(modelo_un, which = 1)  # Resíduos
+```
+
+```{r}
+residuos <- residuals(modelo_cs, type = "pearson")
+hist(residuos)
+shapiro.test(residuos)
+```
+```{r}
+residuos <- residuals(modelo_ar1, type = "pearson")
+hist(residuos)
+shapiro.test(residuos)
+```
+
+```{r}
+residuos <- residuals(modelo_un, type = "pearson")
+hist(residuos)
+shapiro.test(residuos)
+```
